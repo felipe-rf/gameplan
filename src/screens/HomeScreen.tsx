@@ -3,39 +3,136 @@ import {
   Modal,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
-import { Header } from "../components/Header";
 import { useGames } from "../context/GamesContext";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { COLORS } from "../styles/theme";
 import { RootStackParamList } from "../navigation/types";
 import { GameItem } from "../types/gameitem";
 import { formatDateTime } from "../utils/date";
-
+import { themeColors, font } from "../styles/theme";
 type HomeScreenProps = NativeStackScreenProps<RootStackParamList, "Home">;
 
-export function HomeScreen({ navigation }: HomeScreenProps) {
-  const { games, pendingGames, playedCount } = useGames();
-  const [isPickModalVisible, setIsPickModalVisible] = useState(false);
-  const [pickedGame, setPickedGame] = useState<GameItem | null>(null);
+type RandomType = "true-random" | "not-played-in-a-while" | "long-time";
 
-  const playableGames = pendingGames.filter(
-    (game) => game.status === "playing",
+const RANDOM_TYPE_OPTIONS: Array<{ value: RandomType; label: string }> = [
+  { value: "true-random", label: "True Random" },
+  { value: "not-played-in-a-while", label: "Games not played in a while" },
+  {
+    value: "long-time",
+    label: "Games not played in a long time",
+  },
+];
+
+export function HomeScreen({ navigation }: HomeScreenProps) {
+  const { games, playedRegisters } = useGames();
+  const { width } = useWindowDimensions();
+  const [isPickModalVisible, setIsPickModalVisible] = useState(false);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [pickedGame, setPickedGame] = useState<GameItem | null>(null);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [includeFinishedGames, setIncludeFinishedGames] = useState(false);
+  const [randomType, setRandomType] = useState<RandomType>("true-random");
+
+  const availablePlatforms = Array.from(
+    new Set(games.map((game) => game.platform).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const lastPlayedByGameId = playedRegisters.reduce<Record<string, number>>(
+    (acc, register) => {
+      const ts = new Date(register.createdAt).getTime();
+      const current = acc[register.gameId] ?? 0;
+      acc[register.gameId] = Math.max(current, ts);
+      return acc;
+    },
+    {},
   );
 
+  const filteredPool = games.filter((game) => {
+    if (game.status === "ignore") {
+      return false;
+    }
+
+    if (!includeFinishedGames && game.status !== "playing") {
+      return false;
+    }
+
+    if (
+      selectedPlatforms.length &&
+      !selectedPlatforms.includes(game.platform)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  function pickTrueRandom(pool: GameItem[]) {
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    return pool[randomIndex];
+  }
+
+  function pickNotPlayedInAWhile(pool: GameItem[]) {
+    const now = Date.now();
+    const weighted = pool.map((game) => {
+      const lastPlayed =
+        lastPlayedByGameId[game.id] ?? new Date(game.createdAt).getTime();
+      const age = Math.max(1, now - lastPlayed);
+      return { game, weight: age };
+    });
+
+    const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+    let cursor = Math.random() * totalWeight;
+
+    for (const item of weighted) {
+      cursor -= item.weight;
+      if (cursor <= 0) {
+        return item.game;
+      }
+    }
+
+    return weighted[weighted.length - 1].game;
+  }
+
+  function pickLongTime(pool: GameItem[]) {
+    const now = Date.now();
+    const ordered = [...pool].sort((a, b) => {
+      const aLast = lastPlayedByGameId[a.id] ?? new Date(a.createdAt).getTime();
+      const bLast = lastPlayedByGameId[b.id] ?? new Date(b.createdAt).getTime();
+      return now - bLast - (now - aLast);
+    });
+
+    return ordered[0];
+  }
+
   function handlePickTodayGame() {
-    if (!playableGames.length) {
+    if (!filteredPool.length) {
       setPickedGame(null);
       setIsPickModalVisible(true);
       return;
     }
 
-    const randomIndex = Math.floor(Math.random() * playableGames.length);
-    setPickedGame(playableGames[randomIndex]);
+    const picked =
+      randomType === "true-random"
+        ? pickTrueRandom(filteredPool)
+        : randomType === "not-played-in-a-while"
+          ? pickNotPlayedInAWhile(filteredPool)
+          : pickLongTime(filteredPool);
+
+    setPickedGame(picked);
     setIsPickModalVisible(true);
+  }
+
+  function togglePlatform(platform: string) {
+    setSelectedPlatforms((current) =>
+      current.includes(platform)
+        ? current.filter((item) => item !== platform)
+        : [...current, platform],
+    );
   }
 
   const pickedStatusLabel =
@@ -45,205 +142,227 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         ? "Finished"
         : "Ignore";
 
+  const pickedLastPlayedLabel = pickedGame
+    ? lastPlayedByGameId[pickedGame.id]
+      ? formatDateTime(
+          new Date(lastPlayedByGameId[pickedGame.id]).toISOString(),
+        )
+      : "Never"
+    : "-";
+
+  const contentWidth = Math.min(280, Math.max(220, width - 32));
+  const mainButtonSize = Math.min(280, Math.max(220, contentWidth));
+  const titleFontSize = width < 380 ? 30 : width < 768 ? 36 : 40;
+  const secondaryFontSize = width < 380 ? 18 : 20;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.homePanel}>
-          <Pressable style={styles.mainButton} onPress={handlePickTodayGame}>
-            <Text style={styles.mainButtonText}>What should I play</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() => navigation.navigate("Backlog")}
-          >
-            <Text style={styles.secondaryButtonText}>Backlog</Text>
-          </Pressable>
-        </View>
-
-        <Modal
-          transparent
-          animationType="fade"
-          visible={isPickModalVisible}
-          onRequestClose={() => setIsPickModalVisible(false)}
+    <SafeAreaView style={styles.root}>
+      <View style={[styles.group1, { width: contentWidth }]}>
+        <Pressable
+          style={[
+            styles.mainButton,
+            { width: mainButtonSize, height: mainButtonSize },
+          ]}
+          onPress={handlePickTodayGame}
         >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>What should I play?</Text>
+          <Text style={[styles.whatShouldIPlay, { fontSize: titleFontSize }]}>
+            What should I play?
+          </Text>
+        </Pressable>
 
-              {pickedGame ? (
-                <>
-                  <Text style={styles.modalGameTitle}>{pickedGame.title}</Text>
-                  <Text style={styles.modalLine}>
-                    Platform: {pickedGame.platform}
-                  </Text>
-                  <Text style={styles.modalLine}>
-                    Status: {pickedStatusLabel}
-                  </Text>
-                  <Text style={styles.modalLine}>
-                    Added: {formatDateTime(pickedGame.createdAt)}
-                  </Text>
+        <Pressable
+          style={[styles.secondButton, { width: contentWidth }]}
+          onPress={() => navigation.navigate("Backlog")}
+        >
+          <Text style={[styles.backlog, { fontSize: secondaryFontSize }]}>
+            Backlog
+          </Text>
+        </Pressable>
+      </View>
 
-                  <View style={styles.modalActions}>
-                    <Pressable
-                      style={[styles.modalButton, styles.modalCancelButton]}
-                      onPress={() => setIsPickModalVisible(false)}
-                    >
-                      <Text style={styles.modalCancelText}>Close</Text>
-                    </Pressable>
+      <Modal
+        transparent
+        animationType="fade"
+        visible={isPickModalVisible}
+        onRequestClose={() => setIsPickModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>What should I play?</Text>
 
-                    <Pressable
-                      style={[styles.modalButton, styles.modalPrimaryButton]}
-                      onPress={() => {
-                        setIsPickModalVisible(false);
-                        navigation.navigate("GameInfo", {
-                          gameId: pickedGame.id,
-                        });
-                      }}
-                    >
-                      <Text style={styles.modalPrimaryText}>Open details</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.modalLine}>
-                    No game with status "playing" found in your backlog.
-                  </Text>
+            {pickedGame ? (
+              <>
+                <Text style={styles.modalGameTitle}>{pickedGame.title}</Text>
+                <Text style={styles.modalLine}>{pickedGame.platform}</Text>
+                <Text style={styles.modalLine}>
+                  Status: {pickedStatusLabel}
+                </Text>
+                <Text style={styles.modalLine}>
+                  Last Played: {pickedLastPlayedLabel}
+                </Text>
+
+                <View style={styles.modalActions}>
                   <Pressable
-                    style={[
-                      styles.modalButton,
-                      styles.modalPrimaryButton,
-                      styles.modalSingleButton,
-                    ]}
+                    style={[styles.modalButton, styles.modalCancelButton]}
                     onPress={() => setIsPickModalVisible(false)}
                   >
-                    <Text style={styles.modalPrimaryText}>Ok</Text>
+                    <Text style={styles.modalCancelText}>Close</Text>
                   </Pressable>
-                </>
-              )}
-            </View>
+
+                  <Pressable
+                    style={[styles.modalButton, styles.modalPrimaryButton]}
+                    onPress={() => {
+                      setIsPickModalVisible(false);
+                      navigation.navigate("GameInfo", {
+                        gameId: pickedGame.id,
+                      });
+                    }}
+                  >
+                    <Text style={styles.modalPrimaryText}>Open details</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalLine}>
+                  No game with status "playing" found in your backlog.
+                </Text>
+                <Pressable
+                  style={[
+                    styles.modalButton,
+                    styles.modalPrimaryButton,
+                    styles.modalSingleButton,
+                  ]}
+                  onPress={() => setIsPickModalVisible(false)}
+                >
+                  <Text style={styles.modalPrimaryText}>Ok</Text>
+                </Pressable>
+              </>
+            )}
           </View>
-        </Modal>
-      </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 16,
-  },
-  homePanel: {
-    flex: 1,
+    flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    backgroundColor: themeColors.background,
   },
-  mainButton: {
-    width: "100%",
-    maxWidth: 520,
-    backgroundColor: COLORS.blue,
-    borderRadius: 18,
-    minHeight: 220,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#3A86FF",
-  },
-  mainButtonText: {
-    color: "#FFFFFF",
-    fontSize: 30,
-    fontWeight: "800",
+  backlog: {
+    color: themeColors.white,
     textAlign: "center",
-  },
-  secondaryButton: {
-    width: "60%",
-    maxWidth: 260,
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 42,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryButtonText: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
+    fontFamily: font.bold,
+    fontStyle: "normal",
     fontWeight: "700",
   },
+  group1: {
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    maxWidth: 360,
+    paddingHorizontal: 40,
+    gap: 20,
+  },
+  secondButton: {
+    flexDirection: "row",
+    minHeight: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 40,
+    backgroundColor: themeColors.secondary,
+    shadowColor: themeColors.background,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  whatShouldIPlay: {
+    color: themeColors.background,
+    textAlign: "center",
+    fontFamily: font.bold,
+    fontStyle: "normal",
+    fontWeight: "700",
+  },
+  mainButton: {
+    padding: 20,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 40,
+    backgroundColor: themeColors.primary,
+    shadowColor: themeColors.background,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+  },
+
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
-    padding: 20,
+    alignItems: "center",
+    paddingHorizontal: 16,
   },
   modalCard: {
+    backgroundColor: themeColors.background,
+    borderRadius: 12,
+    padding: 20,
     width: "100%",
-    maxWidth: 520,
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    gap: 8,
+    maxWidth: 400,
+    gap: 10,
   },
   modalTitle: {
-    color: COLORS.textPrimary,
+    color: themeColors.white,
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "700",
     textAlign: "center",
   },
   modalGameTitle: {
-    color: "#FFFFFF",
-    fontSize: 24,
-    fontWeight: "800",
+    color: themeColors.white,
+    fontSize: 32,
+    fontWeight: "700",
     textAlign: "center",
-    marginTop: 2,
   },
   modalLine: {
-    color: COLORS.textSecondary,
+    color: themeColors.white,
     fontSize: 14,
     textAlign: "center",
   },
   modalActions: {
-    marginTop: 8,
     flexDirection: "row",
-    justifyContent: "center",
     gap: 10,
+    marginTop: 20,
   },
   modalButton: {
+    flex: 1,
+    paddingVertical: 12,
     borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  modalCancelButton: {
-    backgroundColor: COLORS.buttonNeutral,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: themeColors.primary,
   },
   modalPrimaryButton: {
-    backgroundColor: COLORS.blue,
-  },
-  modalCancelText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 13,
+    backgroundColor: themeColors.primary,
   },
   modalPrimaryText: {
-    color: "#FFFFFF",
+    color: themeColors.secondary,
     fontWeight: "700",
-    fontSize: 13,
+  },
+  modalCancelButton: {
+    backgroundColor: themeColors.secondary,
+  },
+  modalCancelText: {
+    color: themeColors.white,
+    fontWeight: "700",
   },
   modalSingleButton: {
+    flex: 0,
     alignSelf: "center",
-    marginTop: 10,
+    paddingHorizontal: 24,
   },
 });

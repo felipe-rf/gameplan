@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { COLORS } from "../styles/theme";
+import { COLORS, font, themeColors } from "../styles/theme";
 
 type GameFormProps = {
   onAddGame: (title: string, platform: string) => void;
@@ -30,14 +30,14 @@ export function GameForm({ onAddGame }: GameFormProps) {
         value={title}
         onChangeText={setTitle}
         placeholder="Nome do jogo"
-        placeholderTextColor="#7A7A80"
+        placeholderTextColor={themeColors.background}
       />
       <TextInput
         style={styles.input}
         value={platform}
         onChangeText={setPlatform}
         placeholder="Plataforma (PC, PS5, Switch...)"
-        placeholderTextColor="#7A7A80"
+        placeholderTextColor={themeColors.background}
       />
 
       <Pressable style={styles.addButton} onPress={handleSubmit}>
@@ -51,26 +51,27 @@ const styles = StyleSheet.create({
   form: {
     gap: 10,
     marginBottom: 14,
+    fontFamily: font.regular,
   },
   input: {
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.border,
+    backgroundColor: themeColors.secondary,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    color: COLORS.textPrimary,
+    color: themeColors.white,
+    fontFamily: font.regular,
     fontSize: 15,
   },
   addButton: {
     marginTop: 2,
-    backgroundColor: COLORS.green,
+    backgroundColor: themeColors.primary,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: "center",
   },
   addButtonText: {
-    color: "#FFFFFF",
+    color: themeColors.secondary,
     fontWeight: "700",
   },
 });

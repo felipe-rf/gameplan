@@ -1,16 +1,10 @@
 import { useMemo, useState } from "react";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ConfirmationModal } from "../components/ConfirmationModal";
 import { useGames } from "../context/GamesContext";
 import { RootStackParamList } from "../navigation/types";
-import { COLORS } from "../styles/theme";
+import { font, themeColors } from "../styles/theme";
 import { GameStatus } from "../types/gameitem";
 import { formatDateTime } from "../utils/date";
 
@@ -26,7 +20,9 @@ export function GameInfo({ route, navigation }: GameInfoProps) {
   const { games, playedRegisters, registerSession, setGameStatus, removeGame } =
     useGames();
   const { gameId } = route.params;
-  const [isConfirmVisible, setIsConfirmVisible] = useState(false);
+  const [isRegisterConfirmVisible, setIsRegisterConfirmVisible] =
+    useState(false);
+  const [isDeleteConfirmVisible, setIsDeleteConfirmVisible] = useState(false);
 
   const gameItem = useMemo(
     () => games.find((game) => game.id === gameId) ?? null,
@@ -101,12 +97,12 @@ export function GameInfo({ route, navigation }: GameInfoProps) {
 
   function handleConfirmRegisterSession() {
     registerSession(gameId);
-    setIsConfirmVisible(false);
+    setIsRegisterConfirmVisible(false);
   }
 
-  function onRemove(id: string) {
-    setIsConfirmVisible(false);
-    removeGame(id);
+  function handleConfirmDelete() {
+    setIsDeleteConfirmVisible(false);
+    removeGame(gameId);
     navigation.navigate("Backlog", undefined, { pop: true });
   }
   return (
@@ -119,80 +115,23 @@ export function GameInfo({ route, navigation }: GameInfoProps) {
         <View style={styles.heroSection}>
           <Text style={styles.heroTitle}>{gameItem.title}</Text>
           <Text style={styles.heroSubtitle}>{gameItem.platform}</Text>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>{statusLabel}</Text>
-          </View>
         </View>
 
         <View style={styles.infoSection}>
-          <Text style={styles.sectionTitle}>Resumo</Text>
+          <Text style={styles.sectionTitle}>Stats</Text>
           <Text style={styles.infoLine}>
-            Jogado: {gameItem.played ? "Sim" : "Nao"}
+            Added on: {formatDateTime(gameItem.createdAt)}
           </Text>
           <Text style={styles.infoLine}>
-            Adicionado em: {formatDateTime(gameItem.createdAt)}
-          </Text>
-          <Text style={styles.infoLine}>
-            Total de sessoes: {registers.length}
+            Total sessions: {registers.length}
           </Text>
           <Text style={styles.infoHighlight}>
-            Ultimo registro:{" "}
+            Latest log:{" "}
             {latestRegister
               ? formatDateTime(latestRegister.createdAt)
-              : "Sem registros"}
+              : "No logs"}
           </Text>
         </View>
-
-        <View style={styles.infoSection}>
-          <Text style={styles.sectionTitle}>Visualizacao de sessoes</Text>
-
-          {sessionsByDay.length ? (
-            <View style={styles.chartBlock}>
-              {sessionsByDay.map((item) => {
-                const widthPercent = Math.max(
-                  12,
-                  Math.round((item.count / maxSessionsInDay) * 100),
-                );
-                const dayLabel = new Date(
-                  `${item.day}T00:00:00`,
-                ).toLocaleDateString("pt-BR", {
-                  day: "2-digit",
-                  month: "2-digit",
-                });
-
-                return (
-                  <View key={item.day} style={styles.chartRow}>
-                    <Text style={styles.chartLabel}>{dayLabel}</Text>
-                    <View style={styles.chartTrack}>
-                      <View
-                        style={[
-                          styles.chartFill,
-                          { width: `${widthPercent}%` },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.chartValue}>{item.count}x</Text>
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <Text style={styles.infoLine}>Sem sessoes registradas ainda.</Text>
-          )}
-
-          {recentSessionTimes.length > 0 && (
-            <View style={styles.timelineWrap}>
-              {recentSessionTimes.map((session) => (
-                <View key={session.id} style={styles.timelineChip}>
-                  <Text style={styles.timelineChipText}>
-                    {formatDateTime(session.createdAt)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
         <View style={styles.infoSection}>
           <Text style={styles.sectionTitle}>Mudar status</Text>
           <View style={styles.statusRow}>
@@ -224,55 +163,40 @@ export function GameInfo({ route, navigation }: GameInfoProps) {
 
         <View style={styles.actionRow}>
           <Pressable
-            style={styles.registerButton}
-            onPress={() => setIsConfirmVisible(true)}
-          >
-            <Text style={styles.registerButtonText}>Registrar sessao</Text>
-          </Pressable>
-
-          <Pressable
             style={[styles.registerButton, styles.deleteButton]}
-            onPress={(event) => {
-              event.stopPropagation();
-              onRemove(gameItem.id);
-            }}
+            onPress={() => setIsDeleteConfirmVisible(true)}
           >
-            <Text style={styles.registerButtonText}>Excluir</Text>
+            <Text style={styles.registerButtonText}>Delete</Text>
+          </Pressable>
+          <Pressable
+            style={styles.registerButton}
+            onPress={() => setIsRegisterConfirmVisible(true)}
+          >
+            <Text style={styles.registerButtonText}>Register session</Text>
           </Pressable>
         </View>
       </View>
 
-      <Modal
-        transparent
-        animationType="fade"
-        visible={isConfirmVisible}
-        onRequestClose={() => setIsConfirmVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Confirmar registro</Text>
-            <Text style={styles.modalText}>
-              Deseja registrar uma sessao para este jogo agora?
-            </Text>
+      <ConfirmationModal
+        visible={isRegisterConfirmVisible}
+        title="Confirm register"
+        message="Do you want to register a session for this game now?"
+        cancelLabel="Cancel"
+        confirmLabel="Confirm"
+        onCancel={() => setIsRegisterConfirmVisible(false)}
+        onConfirm={handleConfirmRegisterSession}
+      />
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={[styles.modalButton, styles.modalCancelButton]}
-                onPress={() => setIsConfirmVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.modalButton, styles.modalConfirmButton]}
-                onPress={handleConfirmRegisterSession}
-              >
-                <Text style={styles.modalConfirmText}>Confirmar</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ConfirmationModal
+        visible={isDeleteConfirmVisible}
+        title="Confirm delete"
+        message="Do you want to delete this game from the backlog?"
+        cancelLabel="Cancel"
+        confirmLabel="Delete"
+        confirmVariant="danger"
+        onCancel={() => setIsDeleteConfirmVisible(false)}
+        onConfirm={handleConfirmDelete}
+      />
     </ScrollView>
   );
 }
@@ -280,7 +204,8 @@ export function GameInfo({ route, navigation }: GameInfoProps) {
 const styles = StyleSheet.create({
   scroll: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: themeColors.background,
+    fontFamily: font.regular,
   },
   screenContent: {
     flexGrow: 1,
@@ -293,19 +218,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
-    backgroundColor: COLORS.background,
+    backgroundColor: themeColors.background,
   },
   missingTitle: {
-    color: COLORS.textPrimary,
+    color: themeColors.white,
     fontSize: 20,
     fontWeight: "800",
   },
   card: {
     width: "100%",
     maxWidth: 560,
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.border,
-    borderWidth: 1,
+    backgroundColor: themeColors.background,
     borderRadius: 16,
     padding: 16,
     gap: 14,
@@ -315,20 +238,21 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   heroTitle: {
-    color: COLORS.textPrimary,
+    color: themeColors.white,
     fontSize: 24,
     fontWeight: "800",
     textAlign: "center",
+    fontFamily: font.bold,
   },
   heroSubtitle: {
-    color: COLORS.textSecondary,
+    color: themeColors.white,
     fontSize: 15,
     textAlign: "center",
   },
   statusBadge: {
     marginTop: 4,
-    backgroundColor: "#12233F",
-    borderColor: COLORS.blue,
+    backgroundColor: themeColors.secondary,
+    borderColor: themeColors.white,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 12,
@@ -340,26 +264,25 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   infoSection: {
-    backgroundColor: "#121820",
-    borderColor: COLORS.border,
+    backgroundColor: themeColors.secondary,
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
     gap: 6,
   },
   sectionTitle: {
-    color: COLORS.textPrimary,
+    color: themeColors.white,
     fontSize: 15,
     fontWeight: "800",
     marginBottom: 2,
   },
   infoLine: {
-    color: COLORS.textSecondary,
+    color: themeColors.white,
     fontSize: 14,
   },
   infoHighlight: {
     marginTop: 2,
-    color: COLORS.textPrimary,
+    color: themeColors.white,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -374,7 +297,7 @@ const styles = StyleSheet.create({
   },
   chartLabel: {
     width: 44,
-    color: COLORS.textSecondary,
+    color: themeColors.primary,
     fontSize: 12,
   },
   chartTrack: {
@@ -386,13 +309,13 @@ const styles = StyleSheet.create({
   },
   chartFill: {
     height: "100%",
-    backgroundColor: COLORS.blue,
+    backgroundColor: themeColors.primary,
     borderRadius: 999,
   },
   chartValue: {
     width: 24,
     textAlign: "right",
-    color: COLORS.textPrimary,
+    color: themeColors.primary,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -404,14 +327,14 @@ const styles = StyleSheet.create({
   },
   timelineChip: {
     backgroundColor: "#222B36",
-    borderColor: COLORS.border,
+    borderColor: themeColors.primary,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   timelineChipText: {
-    color: COLORS.textSecondary,
+    color: themeColors.primary,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -421,24 +344,24 @@ const styles = StyleSheet.create({
   },
   statusButton: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderWidth: 2,
+    borderColor: themeColors.primary,
     borderRadius: 10,
     paddingVertical: 8,
     alignItems: "center",
-    backgroundColor: COLORS.panel,
+    backgroundColor: themeColors.secondary,
   },
   statusButtonActive: {
-    borderColor: COLORS.blue,
-    backgroundColor: "#12233F",
+    borderColor: themeColors.primary,
+    backgroundColor: themeColors.primary,
   },
   statusButtonText: {
-    color: COLORS.textSecondary,
+    color: themeColors.white,
     fontSize: 12,
     fontWeight: "700",
   },
   statusButtonTextActive: {
-    color: "#FFFFFF",
+    color: themeColors.secondary,
   },
   actionRow: {
     flexDirection: "row",
@@ -447,72 +370,18 @@ const styles = StyleSheet.create({
   },
   registerButton: {
     flex: 1,
-    backgroundColor: COLORS.blue,
+    backgroundColor: themeColors.primary,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 9,
     alignItems: "center",
   },
   deleteButton: {
-    backgroundColor: COLORS.red,
+    backgroundColor: themeColors.danger,
   },
   registerButtonText: {
-    color: "#FFFFFF",
+    color: themeColors.secondary,
     fontSize: 13,
     fontWeight: "700",
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 480,
-    backgroundColor: COLORS.panel,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-  },
-  modalTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  modalText: {
-    color: COLORS.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  modalActions: {
-    marginTop: 4,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-  },
-  modalButton: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  modalCancelButton: {
-    backgroundColor: COLORS.buttonNeutral,
-  },
-  modalConfirmButton: {
-    backgroundColor: COLORS.green,
-  },
-  modalCancelText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-  modalConfirmText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 13,
   },
 });

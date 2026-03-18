@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -7,23 +7,29 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { EmptyState } from "../components/EmptyState";
+import { ConfirmationModal } from "../components/ConfirmationModal";
 import { GameCard } from "../components/GameCard";
 import { GameForm } from "../components/GameForm";
 import { useGames } from "../context/GamesContext";
 import { RootStackParamList } from "../navigation/types";
-import { COLORS } from "../styles/theme";
+import { font, themeColors } from "../styles/theme";
 
 type BacklogScreenProps = NativeStackScreenProps<RootStackParamList, "Backlog">;
 
 export function BacklogScreen({ navigation }: BacklogScreenProps) {
   const { games, addBacklogGame, markGamesAsPlayed, removeGames } = useGames();
+  const { height } = useWindowDimensions();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState<"delete" | "register" | null>(
+    null,
+  );
   const longPressTriggeredRef = useRef(false);
 
   const filteredGames = useMemo(() => {
@@ -78,108 +84,80 @@ export function BacklogScreen({ navigation }: BacklogScreenProps) {
     );
   }
 
+  useEffect(() => {
+    if (isSelectMode && selectedIds.length === 0) {
+      setIsSelectMode(false);
+    }
+  }, [isSelectMode, selectedIds]);
+
+  // Reserve space for search bar, button, paddings and keep the list scrollable.
+  const listMaxHeight = Math.max(220, height - 280);
+
   return (
     <View style={styles.container}>
-      <View style={styles.headerCard}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>Backlog</Text>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{games.length}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.subtitle}>
-          Segure um card para iniciar selecao multipla.
-        </Text>
-      </View>
-
-      <View style={styles.controlsCard}>
-        <Pressable
-          style={styles.createButton}
-          onPress={() => setShowCreateForm((current) => !current)}
-        >
-          <Text style={styles.createButtonText}>+ Novo jogo</Text>
-        </Pressable>
-
+      <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
           value={searchText}
           onChangeText={setSearchText}
-          placeholder="Buscar por nome"
-          placeholderTextColor="#7A7A80"
+          placeholder="Search by name"
+          placeholderTextColor={themeColors.secondary}
         />
       </View>
 
-      <FlatList
-        data={filteredGames}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.list,
-          isSelectMode && styles.listWithBulkBar,
-        ]}
-        ListEmptyComponent={<EmptyState />}
-        renderItem={({ item }) => (
-          <GameCard
-            item={item}
-            selectionMode={isSelectMode}
-            selected={selectedIds.includes(item.id)}
-            onLongPress={(game) => handleCardLongPress(game.id)}
-            onPress={(game) => {
-              if (longPressTriggeredRef.current) {
-                longPressTriggeredRef.current = false;
-                return;
-              }
+      <View style={[styles.listWrapper, { maxHeight: listMaxHeight }]}>
+        <FlatList
+          data={filteredGames}
+          keyExtractor={(item) => item.id}
+          style={styles.flatList}
+          contentContainerStyle={[styles.list]}
+          ListEmptyComponent={<EmptyState />}
+          renderItem={({ item }) => (
+            <GameCard
+              item={item}
+              selectionMode={isSelectMode}
+              selected={selectedIds.includes(item.id)}
+              onLongPress={(game) => handleCardLongPress(game.id)}
+              onPress={(game) => {
+                if (longPressTriggeredRef.current) {
+                  longPressTriggeredRef.current = false;
+                  return;
+                }
 
-              if (isSelectMode) {
-                toggleSelectGame(game.id);
-                return;
-              }
+                if (isSelectMode) {
+                  toggleSelectGame(game.id);
+                  return;
+                }
 
-              navigation.navigate("GameInfo", { gameId: game.id });
-            }}
-          />
-        )}
-      />
-
-      {isSelectMode && (
-        <View style={styles.bulkActionsBar}>
-          <View style={styles.bulkHeaderRow}>
-            <Text style={styles.bulkActionsText}>
-              {selectedIds.length} selecionados
-            </Text>
-            <Pressable onPress={clearSelectionMode}>
-              <Text style={styles.bulkCancelText}>Cancelar selecao</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.bulkButtonsRow}>
-            <Pressable
-              style={[
-                styles.bulkButton,
-                styles.bulkPlayedButton,
-                !selectedIds.length && styles.bulkButtonDisabled,
-              ]}
-              disabled={!selectedIds.length}
-              onPress={handleMarkSelectedAsPlayed}
-            >
-              <Text style={styles.bulkButtonText}>Marcar jogados</Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.bulkButton,
-                styles.bulkDeleteButton,
-                !selectedIds.length && styles.bulkButtonDisabled,
-              ]}
-              disabled={!selectedIds.length}
-              onPress={handleDeleteSelected}
-            >
-              <Text style={styles.bulkButtonText}>Excluir selecionados</Text>
-            </Pressable>
-          </View>
+                navigation.navigate("GameInfo", { gameId: game.id });
+              }}
+            />
+          )}
+        />
+      </View>
+      {isSelectMode ? (
+        <View style={styles.selectionActionsRow}>
+          <Pressable
+            style={[styles.selectionActionButton, styles.deleteActionButton]}
+            onPress={() => setBulkAction("delete")}
+          >
+            <Text style={styles.selectionActionText}>Delete</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.selectionActionButton, styles.registerActionButton]}
+            onPress={() => setBulkAction("register")}
+          >
+            <Text style={styles.selectionActionText}>Register session</Text>
+          </Pressable>
         </View>
+      ) : (
+        <Pressable
+          style={styles.createButton}
+          onPress={() => setShowCreateForm((current) => !current)}
+        >
+          <Text style={styles.createButtonText}>Add Game</Text>
+        </Pressable>
       )}
-
       <Modal
         transparent
         animationType="fade"
@@ -189,9 +167,9 @@ export function BacklogScreen({ navigation }: BacklogScreenProps) {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Novo jogo</Text>
+              <Text style={styles.modalTitle}>Add</Text>
               <Pressable onPress={() => setShowCreateForm(false)}>
-                <Text style={styles.modalCloseText}>Fechar</Text>
+                <Text style={styles.modalCloseText}>Close</Text>
               </Pressable>
             </View>
 
@@ -199,6 +177,33 @@ export function BacklogScreen({ navigation }: BacklogScreenProps) {
           </View>
         </View>
       </Modal>
+
+      <ConfirmationModal
+        visible={bulkAction === "register"}
+        title="Confirm register"
+        message="Register a session for all selected games?"
+        cancelLabel="Cancel"
+        confirmLabel="Register"
+        onCancel={() => setBulkAction(null)}
+        onConfirm={() => {
+          setBulkAction(null);
+          handleMarkSelectedAsPlayed();
+        }}
+      />
+
+      <ConfirmationModal
+        visible={bulkAction === "delete"}
+        title="Confirm delete"
+        message="Delete all selected games from backlog?"
+        cancelLabel="Cancel"
+        confirmLabel="Delete"
+        confirmVariant="danger"
+        onCancel={() => setBulkAction(null)}
+        onConfirm={() => {
+          setBulkAction(null);
+          handleDeleteSelected();
+        }}
+      />
     </View>
   );
 }
@@ -206,174 +211,109 @@ export function BacklogScreen({ navigation }: BacklogScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 16,
+    backgroundColor: "Background",
+    paddingHorizontal: 32,
     paddingTop: 10,
+    gap: 30,
   },
-  headerCard: {
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 12,
-    gap: 4,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  title: {
-    color: COLORS.textPrimary,
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  subtitle: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-  },
-  countBadge: {
-    minWidth: 34,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: "#12233F",
-    borderColor: COLORS.blue,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-  countBadgeText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 12,
-  },
-  controlsCard: {
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
+  list: {
     gap: 10,
   },
+  listWrapper: {
+    width: "100%",
+    flexShrink: 1,
+  },
+  flatList: {
+    width: "100%",
+  },
+  searchBar: {
+    flexDirection: "row",
+    height: 54,
+    paddingTop: 15,
+    paddingLeft: 27,
+    paddingBottom: 14,
+    paddingRight: 42,
+    alignItems: "center",
+    flexShrink: 0,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderWidth: 4,
+    borderStyle: "solid",
+    borderColor: themeColors.secondary,
+  },
+  searchInput: {
+    flex: 1,
+    color: themeColors.white,
+    fontFamily: font.regular,
+    fontSize: 14,
+  },
   createButton: {
-    backgroundColor: COLORS.blue,
+    backgroundColor: themeColors.primary,
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: "center",
   },
   createButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
+    color: themeColors.secondary,
+    fontSize: 16,
+    fontFamily: font.bold,
+    fontWeight: "600",
   },
-  searchInput: {
-    backgroundColor: "#111924",
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: COLORS.textPrimary,
-    fontSize: 15,
-  },
-  list: {
-    flexGrow: 1,
-    paddingBottom: 20,
+  selectionActionsRow: {
+    width: "100%",
+    flexDirection: "row",
     gap: 10,
   },
-  listWithBulkBar: {
-    paddingBottom: 96,
-  },
-  bulkActionsBar: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    backgroundColor: "#1A2330",
-    borderColor: "#314155",
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    gap: 8,
-    shadowColor: "#000000",
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  bulkActionsText: {
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  bulkHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  bulkCancelText: {
-    color: "#D7E2F2",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  bulkButtonsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  bulkButton: {
+  selectionActionButton: {
     flex: 1,
-    borderRadius: 8,
-    paddingVertical: 9,
+    borderRadius: 10,
+    paddingVertical: 14,
     alignItems: "center",
   },
-  bulkPlayedButton: {
-    backgroundColor: COLORS.green,
+  deleteActionButton: {
+    backgroundColor: themeColors.danger,
   },
-  bulkDeleteButton: {
-    backgroundColor: COLORS.red,
+  registerActionButton: {
+    backgroundColor: themeColors.primary,
   },
-  bulkButtonDisabled: {
-    opacity: 0.5,
-  },
-  bulkButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
+  selectionActionText: {
+    color: themeColors.secondary,
+    fontSize: 16,
+    fontFamily: font.bold,
+    fontWeight: "600",
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 16,
   },
   modalCard: {
-    width: "100%",
-    maxWidth: 520,
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.border,
-    borderWidth: 1,
+    backgroundColor: themeColors.background,
     borderRadius: 12,
-    padding: 12,
+    padding: 20,
+    width: "100%",
+    maxWidth: 400,
+    gap: 10,
   },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
   },
   modalTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: "800",
+    color: themeColors.white,
+    fontSize: 22,
+    fontWeight: "700",
+    textAlign: "center",
+    fontFamily: font.bold,
   },
   modalCloseText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
+    color: themeColors.white,
     fontWeight: "700",
+    fontFamily: font.bold,
   },
 });

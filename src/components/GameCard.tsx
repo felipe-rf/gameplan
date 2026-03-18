@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { COLORS } from "../styles/theme";
+import { font, themeColors } from "../styles/theme";
 import { GameItem } from "../types/gameitem";
 import { formatDateTime } from "../utils/date";
 
@@ -27,7 +27,7 @@ export function GameCard({
 
   return (
     <Pressable
-      style={styles.gameCard}
+      style={styles.root}
       onPress={() => onPress?.(item)}
       onLongPress={() => onLongPress?.(item)}
       delayLongPress={220}
@@ -40,91 +40,67 @@ export function GameCard({
         </View>
       )}
 
-      <View style={styles.gameInfo}>
-        <Text style={styles.gameTitle}>{item.title}</Text>
-        <Text style={styles.gamePlatform}>{item.platform}</Text>
-        <Text style={styles.gameStatus}>Status: {statusLabel}</Text>
-        <Text style={styles.gameMeta}>
-          Inserido em {formatDateTime(item.createdAt)}
-        </Text>
+      <View style={styles.text}>
+        <Text style={styles.gameName}>{item.title}</Text>
+        <Text style={styles.platform}>{item.platform}</Text>
       </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  gameCard: {
-    backgroundColor: COLORS.panel,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
+  root: {
     flexDirection: "row",
+    height: 74,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    backgroundColor: "rgba(28, 37, 65, 1)",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+  },
+  gameName: {
+    color: "rgba(255, 255, 255, 1)",
+    fontFamily: font.bold,
+    fontSize: 16,
+    fontStyle: "normal",
+    fontWeight: "700",
+  },
+  platform: {
+    flexDirection: "column",
+    justifyContent: "center",
+    color: "rgba(255, 255, 255, 1)",
+    fontFamily: font.regular,
+    fontSize: 14,
+    fontStyle: "normal",
+    fontWeight: "400",
   },
   selectionDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 999,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
-    borderColor: COLORS.textMuted,
-    marginTop: 2,
+    borderColor: themeColors.primary,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center",
   },
   selectionDotActive: {
-    borderColor: COLORS.blue,
+    backgroundColor: themeColors.primary,
   },
   selectionDotInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: COLORS.blue,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
   },
-  gameInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  gameTitle: {
-    color: "#F0F6FC",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  gamePlatform: {
-    color: "#9BA4AE",
-    fontSize: 13,
-  },
-  gameStatus: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    marginTop: 3,
-  },
-  gameMeta: {
-    marginTop: 4,
-    color: COLORS.textMuted,
-    fontSize: 12,
-  },
-  cardActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  smallButton: {
-    backgroundColor: COLORS.buttonNeutral,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  smallButtonSuccess: {
-    backgroundColor: COLORS.greenSuccess,
-  },
-  smallButtonDanger: {
-    backgroundColor: COLORS.red,
-  },
-  smallButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
+  text: {
+    flexDirection: "column",
+    gap: 4,
+    alignItems: "flex-start",
+    justifyContent: "center",
   },
 });
