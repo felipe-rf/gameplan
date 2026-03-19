@@ -29,6 +29,8 @@ const RANDOM_TYPE_OPTIONS: Array<{ value: RandomType; label: string }> = [
   },
 ];
 
+const NEVER_PLAYED_FALLBACK = new Date("2000-01-01").getTime();
+
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { games, playedRegisters } = useGames();
   const { width } = useWindowDimensions();
@@ -102,8 +104,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   function pickLongTime(pool: GameItem[]) {
     const now = Date.now();
     const weighted = pool.map((game) => {
-      const lastPlayed =
-        lastPlayedByGameId[game.id] ?? new Date(game.createdAt).getTime();
+      const lastPlayed = lastPlayedByGameId[game.id] ?? NEVER_PLAYED_FALLBACK;
       const age = Math.max(1, now - lastPlayed);
       return { game, weight: age };
     });
@@ -125,18 +126,14 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     const now = Date.now();
 
     const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
-    const SPREAD = 7 * 24 * 60 * 60 * 1000; // controla o "quanto pode variar" (~1 semana)
+    const SPREAD = 7 * 24 * 60 * 60 * 1000;
 
     const weighted = pool.map((game) => {
-      const lastPlayed =
-        lastPlayedByGameId[game.id] ?? new Date(game.createdAt).getTime();
+      const lastPlayed = lastPlayedByGameId[game.id] ?? NEVER_PLAYED_FALLBACK;
 
       const age = now - lastPlayed;
 
-      // distância do ideal (14 dias)
       const distance = age - TWO_WEEKS;
-
-      // função gaussiana (pico em 14 dias)
       const weight = Math.exp(-(distance * distance) / (2 * SPREAD * SPREAD));
 
       return { game, weight };
