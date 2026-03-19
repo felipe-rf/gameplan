@@ -21,15 +21,13 @@ type HomeScreenProps = NativeStackScreenProps<RootStackParamList, "Home">;
 type RandomType = "true-random" | "not-played-in-a-while" | "long-time";
 
 const RANDOM_TYPE_OPTIONS: Array<{ value: RandomType; label: string }> = [
-  { value: "true-random", label: "True Random" },
   { value: "not-played-in-a-while", label: "Games not played in a while" },
   {
     value: "long-time",
     label: "Games not played in a long time",
   },
+  { value: "true-random", label: "True Random" },
 ];
-
-const NEVER_PLAYED_FALLBACK = new Date("2000-01-01").getTime();
 
 export function HomeScreen({ navigation }: HomeScreenProps) {
   const { games, playedRegisters } = useGames();
@@ -103,9 +101,22 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   function pickLongTime(pool: GameItem[]) {
     const now = Date.now();
+
+    const oldestLastPlayed = Math.min(
+      ...pool.map((game) => {
+        return (
+          lastPlayedByGameId[game.id] ?? new Date(game.createdAt).getTime()
+        );
+      }),
+    );
+
+    const NEVER_PLAYED_FALLBACK = oldestLastPlayed - 14 * 24 * 60 * 60 * 1000;
+
     const weighted = pool.map((game) => {
       const lastPlayed = lastPlayedByGameId[game.id] ?? NEVER_PLAYED_FALLBACK;
+
       const age = Math.max(1, now - lastPlayed);
+
       return { game, weight: age };
     });
 
@@ -128,19 +139,30 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
     const SPREAD = 7 * 24 * 60 * 60 * 1000;
 
+    // 1. Encontrar o mais antigo
+    const oldestLastPlayed = Math.min(
+      ...pool.map((game) => {
+        return (
+          lastPlayedByGameId[game.id] ?? new Date(game.createdAt).getTime()
+        );
+      }),
+    );
+
+    // 2. Fallback dinâmico
+    const NEVER_PLAYED_FALLBACK = oldestLastPlayed - 14 * 24 * 60 * 60 * 1000;
+
     const weighted = pool.map((game) => {
       const lastPlayed = lastPlayedByGameId[game.id] ?? NEVER_PLAYED_FALLBACK;
 
       const age = now - lastPlayed;
-
       const distance = age - TWO_WEEKS;
+
       const weight = Math.exp(-(distance * distance) / (2 * SPREAD * SPREAD));
 
       return { game, weight };
     });
 
     const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
-
     let cursor = Math.random() * totalWeight;
 
     for (const item of weighted) {

@@ -24,7 +24,10 @@ export function AppNavigator() {
         screenOptions={{
           animation: "fade",
           headerTitle: "",
-          headerStyle: { backgroundColor: themeColors.background },
+          headerStyle: {
+            backgroundColor: themeColors.background,
+            borderBottomWidth: 0,
+          },
           headerTintColor: themeColors.white,
           headerTitleStyle: { fontWeight: "700" },
           contentStyle: { backgroundColor: themeColors.background },
