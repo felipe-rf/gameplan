@@ -101,7 +101,7 @@ export function BacklogScreen({ navigation }: BacklogScreenProps) {
           value={searchText}
           onChangeText={setSearchText}
           placeholder="Search by name"
-          placeholderTextColor={themeColors.secondary}
+          placeholderTextColor={themeColors.white}
         />
       </View>
 

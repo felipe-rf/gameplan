@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -15,6 +15,7 @@ import { RootStackParamList } from "../navigation/types";
 import { GameItem } from "../types/gameitem";
 import { formatDateTime } from "../utils/date";
 import { themeColors, font } from "../styles/theme";
+import { loadFilterOptions, saveFilterOptions } from "../storage/gameStorage";
 type HomeScreenProps = NativeStackScreenProps<RootStackParamList, "Home">;
 
 type RandomType = "true-random" | "not-played-in-a-while" | "long-time";
@@ -37,6 +38,28 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [includeFinishedGames, setIncludeFinishedGames] = useState(false);
   const [randomType, setRandomType] = useState<RandomType>("true-random");
+
+  // Load filter options on mount
+  useEffect(() => {
+    async function loadOptions() {
+      const options = await loadFilterOptions();
+      if (options) {
+        setRandomType(options.randomType);
+        setSelectedPlatforms(options.selectedPlatforms);
+        setIncludeFinishedGames(options.includeFinishedGames);
+      }
+    }
+    loadOptions();
+  }, []);
+
+  // Save filter options whenever they change
+  useEffect(() => {
+    saveFilterOptions({
+      randomType,
+      selectedPlatforms,
+      includeFinishedGames,
+    });
+  }, [randomType, selectedPlatforms, includeFinishedGames]);
 
   const availablePlatforms = Array.from(
     new Set(games.map((game) => game.platform).filter(Boolean)),
@@ -76,7 +99,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     return pool[randomIndex];
   }
 
-  function pickNotPlayedInAWhile(pool: GameItem[]) {
+  function pickLongTime(pool: GameItem[]) {
     const now = Date.now();
     const weighted = pool.map((game) => {
       const lastPlayed =
@@ -98,15 +121,39 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     return weighted[weighted.length - 1].game;
   }
 
-  function pickLongTime(pool: GameItem[]) {
+  function pickNotPlayedInAWhile(pool: GameItem[]) {
     const now = Date.now();
-    const ordered = [...pool].sort((a, b) => {
-      const aLast = lastPlayedByGameId[a.id] ?? new Date(a.createdAt).getTime();
-      const bLast = lastPlayedByGameId[b.id] ?? new Date(b.createdAt).getTime();
-      return now - bLast - (now - aLast);
+
+    const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+    const SPREAD = 7 * 24 * 60 * 60 * 1000; // controla o "quanto pode variar" (~1 semana)
+
+    const weighted = pool.map((game) => {
+      const lastPlayed =
+        lastPlayedByGameId[game.id] ?? new Date(game.createdAt).getTime();
+
+      const age = now - lastPlayed;
+
+      // distância do ideal (14 dias)
+      const distance = age - TWO_WEEKS;
+
+      // função gaussiana (pico em 14 dias)
+      const weight = Math.exp(-(distance * distance) / (2 * SPREAD * SPREAD));
+
+      return { game, weight };
     });
 
-    return ordered[0];
+    const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+
+    let cursor = Math.random() * totalWeight;
+
+    for (const item of weighted) {
+      cursor -= item.weight;
+      if (cursor <= 0) {
+        return item.game;
+      }
+    }
+
+    return weighted[weighted.length - 1].game;
   }
 
   function handlePickTodayGame() {
@@ -157,18 +204,27 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
 
   return (
     <SafeAreaView style={styles.root}>
+      <Pressable
+        style={styles.filterButton}
+        onPress={() => setIsFilterModalVisible(true)}
+      >
+        <Text style={styles.filterButtonText}>⚙️</Text>
+      </Pressable>
+
       <View style={[styles.group1, { width: contentWidth }]}>
-        <Pressable
-          style={[
-            styles.mainButton,
-            { width: mainButtonSize, height: mainButtonSize },
-          ]}
-          onPress={handlePickTodayGame}
-        >
-          <Text style={[styles.whatShouldIPlay, { fontSize: titleFontSize }]}>
-            What should I play?
-          </Text>
-        </Pressable>
+        <View style={styles.mainButtonContainer}>
+          <Pressable
+            style={[
+              styles.mainButton,
+              { width: mainButtonSize, height: mainButtonSize },
+            ]}
+            onPress={handlePickTodayGame}
+          >
+            <Text style={[styles.whatShouldIPlay, { fontSize: titleFontSize }]}>
+              What should I play?
+            </Text>
+          </Pressable>
+        </View>
 
         <Pressable
           style={[styles.secondButton, { width: contentWidth }]}
@@ -239,6 +295,95 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                 </Pressable>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={isFilterModalVisible}
+        onRequestClose={() => setIsFilterModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Filter Options</Text>
+
+            <ScrollView style={styles.filterScrollView}>
+              {/* Random Type Selection */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Random Algorithm</Text>
+                {RANDOM_TYPE_OPTIONS.map((option) => (
+                  <Pressable
+                    key={option.value}
+                    style={styles.filterOption}
+                    onPress={() => setRandomType(option.value)}
+                  >
+                    <View
+                      style={[
+                        styles.radio,
+                        randomType === option.value && styles.radioSelected,
+                      ]}
+                    />
+                    <Text style={styles.filterOptionText}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Platform Selection */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Platforms</Text>
+                {availablePlatforms.map((platform) => (
+                  <Pressable
+                    key={platform}
+                    style={styles.filterOption}
+                    onPress={() => togglePlatform(platform)}
+                  >
+                    <View
+                      style={[
+                        styles.checkbox,
+                        selectedPlatforms.includes(platform) &&
+                          styles.checkboxSelected,
+                      ]}
+                    >
+                      {selectedPlatforms.includes(platform) && (
+                        <Text style={styles.checkmark}>✓</Text>
+                      )}
+                    </View>
+                    <Text style={styles.filterOptionText}>{platform}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Include Finished Games */}
+              <View style={styles.filterSection}>
+                <Pressable
+                  style={styles.filterOption}
+                  onPress={() => setIncludeFinishedGames(!includeFinishedGames)}
+                >
+                  <View
+                    style={[
+                      styles.checkbox,
+                      includeFinishedGames && styles.checkboxSelected,
+                    ]}
+                  >
+                    {includeFinishedGames && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </View>
+                  <Text style={styles.filterOptionText}>
+                    Include Finished Games
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+
+            <Pressable
+              style={[styles.modalButton, styles.modalPrimaryButton]}
+              onPress={() => setIsFilterModalVisible(false)}
+            >
+              <Text style={styles.modalPrimaryText}>Done</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -364,5 +509,82 @@ const styles = StyleSheet.create({
     flex: 0,
     alignSelf: "center",
     paddingHorizontal: 24,
+  },
+  mainButtonContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  filterButton: {
+    position: "absolute",
+    top: 12,
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: themeColors.secondary,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: themeColors.background,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  filterButtonText: {
+    fontSize: 24,
+  },
+  filterScrollView: {
+    maxHeight: 300,
+    marginVertical: 10,
+  },
+  filterSection: {
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: themeColors.secondary,
+    paddingBottom: 15,
+  },
+  filterSectionTitle: {
+    color: themeColors.white,
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  filterOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 12,
+  },
+  filterOptionText: {
+    color: themeColors.white,
+    fontSize: 14,
+    flex: 1,
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: themeColors.secondary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  radioSelected: {
+    backgroundColor: themeColors.secondary,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: themeColors.secondary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxSelected: {
+    backgroundColor: themeColors.secondary,
+  },
+  checkmark: {
+    color: themeColors.background,
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

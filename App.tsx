@@ -8,7 +8,7 @@ import {
 import { GamesProvider } from "./src/context/GamesContext";
 import { INITIAL_GAMES } from "./src/constants/initialGames";
 import { AppNavigator } from "./src/navigation/AppNavigator";
-import { COLORS } from "./src/styles/theme";
+import { themeColors } from "./src/styles/theme";
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -33,6 +33,6 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: themeColors.background,
   },
 });

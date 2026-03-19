@@ -4,6 +4,13 @@ import { PlayedRegister } from "../types/playedregister";
 
 const GAMES_STORAGE_KEY = "@gamefm:games";
 const PLAYED_REGISTERS_STORAGE_KEY = "@gamefm:played-registers";
+const FILTER_OPTIONS_STORAGE_KEY = "@gamefm:filter-options";
+
+type FilterOptions = {
+  randomType: "true-random" | "not-played-in-a-while" | "long-time";
+  selectedPlatforms: string[];
+  includeFinishedGames: boolean;
+};
 
 function parseArray<T>(rawValue: string | null): T[] {
   if (!rawValue) {
@@ -38,5 +45,24 @@ export async function savePlayedRegisters(
   await AsyncStorage.setItem(
     PLAYED_REGISTERS_STORAGE_KEY,
     JSON.stringify(registers),
+  );
+}
+
+export async function loadFilterOptions(): Promise<FilterOptions | null> {
+  try {
+    const rawOptions = await AsyncStorage.getItem(FILTER_OPTIONS_STORAGE_KEY);
+    if (!rawOptions) {
+      return null;
+    }
+    return JSON.parse(rawOptions) as FilterOptions;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveFilterOptions(options: FilterOptions): Promise<void> {
+  await AsyncStorage.setItem(
+    FILTER_OPTIONS_STORAGE_KEY,
+    JSON.stringify(options),
   );
 }
