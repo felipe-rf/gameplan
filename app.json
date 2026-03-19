@@ -30,12 +30,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "backgroundColor": "#0D1117"
+      "backgroundColor": "#0D1117",
+      "bundler": "metro"
     },
     "extra": {
       "eas": {
         "projectId": "8d69d16c-f351-4143-9b6e-13823feb7259"
       }
+    },
+    "experiments": {
+      "baseUrl": "/gameplan/"
     },
     "owner": "feliperf",
     "plugins": ["expo-font"]
